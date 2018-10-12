@@ -1,53 +1,302 @@
 
 <!DOCTYPE html>
+<html>
+  <head>
+      <title>Bar Chart D3</title>
+      <script src="https://d3js.org/d3.v5.min.js"></script>
+      <script src="https://d3js.org/d3-scale-chromatic.v1.min.js"></script>
+      <script src="https://d3js.org/topojson.v2.min.js"></script>
+      <!-- <script src="http://d3js.org/topojson.v2.min.js"></script>
+      <script src="https://unpkg.com/topojson-client@3"></script> -->
+      <style type="text/css">
+        body{
+          bar_margin: 0;
+        }
 
-<head>
-  
-<title>Bar Chart and Choropleth Map</title>
+        svg {
+          border: 1px solid rgb(206, 205, 205)
+        }
 
-<meta charset="utf-8">
-  
-  
-<script src="https://cdn.jsdelivr.net/npm/vega@4"></script>
-  <script src="https://cdn.jsdelivr.net/npm/vega-lite@3.0.0-rc3"></script>
-  
-<script src="https://cdn.jsdelivr.net/npm/vega-embed@3"></script>
+        svg .myrect {
+            fill: steelblue;
+            stroke-width: 0px;
+        }
+        svg .myrect:hover {
+            fill: red;
+        }
+
+        .all-states {
+          fill: none;
+        }
+
+        .state:hover {
+          fill: red;
+        }
+
+        .state-border {
+          fill: none;
+          stroke: #fff;
+          stroke-linejoin: round;
+        }
+      </style>
+  </head>
+  <body>
+    <div id='container'>
+      <div id='bar-container'>
+        <svg id='svg-bar'></svg>
+      </div>
+      <div id='chor-container'>
+        <svg id='svg-chor'></svg>
+      </div>
+    </div>
+
+    <script type="text/javascript">
+      var Masterdata;
+      var bardata;
+      var choroplethdata;
+      var bar_margin = {top: 10, right: 10, bottom: 40, left: 140};
+      var svgbar_width = 950
+      var svgbar_height = 700
+      var gbar_width = svgbar_width - bar_margin.left - bar_margin.right;
+      var gbar_height = svgbar_height - bar_margin.top - bar_margin.bottom;
+      var choropleth_margin = {top: 10, right: 10, bottom: 40, left: 140};
+      var svgchoropleth_width = 950
+      var svgchoropleth_height = 700
+      var gchoropleth_width = svgchoropleth_width - choropleth_margin.left - choropleth_margin.right;
+      var gchoropleth_height = svgchoropleth_height - choropleth_margin.top - choropleth_margin.bottom;
+
+      function loaddata()
+      {
+        d3.csv("https://raw.githubusercontent.com/PavaniVelichati/usdalosses/master/losses2015_transformed.csv")
+          .then(function(data)
+          {
+            Masterdata = data
+            generateBarData(Masterdata, null)   
+            formbarchart(bardata);
+            generateChorData(Masterdata, null)
+            generatemap(choroplethdata)
+          }
+        );
+      }
+      
+      function generateBarData(masterData, state) {
+
+        if(state === 'all' || state === 'All' || state === null){
+          bardata = d3.nest()
+                      .key(function(d) { return d.Damage_Descp;})
+                      .rollup(function(d) { 
+                        return d3.sum(d, function(g) {return g.Amount; });
+                      })
+                      .entries(masterData)
+                      .sort(function(a, b){ return d3.ascending(a.values, b.values); });
+          bardata.sort(function (a, b) {return a.value - b.value;})
+        }else{
+          if(state < 10){
+            state = state.replace(/^0+(?!\.|$)/, '')   // to remove 0 in state code
+          }
+          bardata = d3.nest()
+                      .key(function(d) { return d.Damage_Descp;})
+                      .rollup(function(d) { 
+                        return d3.sum(d, function(g) {return g.Amount; });
+                      })
+                      .entries(masterData.filter(function(d) {return d.State_Code === state;}))
+                      .sort(function(a, b){ return d3.ascending(a.values, b.values); });
+          bardata.sort(function (a, b) {return a.value - b.value;})
+        }
+        // console.log(bardata)
+      }
+
+      function generateChorData(masterData, type) {
+          // console.log(type)
+        if(type === null || type === 'All' || type === 'all'){
+          choroplethdata = d3.nest()
+                      .key(function(d) { return d.State_Code;})
+                      .rollup(function(d) { 
+                        return d3.sum(d, function(g) {return g.Amount; });
+                      })
+                      .entries(masterData)
+                      .sort(function(a, b){ return d3.ascending(a.values, b.values); });
+        }else{
+          choroplethdata = d3.nest()
+                      .key(function(d) { return d.State_Code;})
+                      .rollup(function(d) { 
+                        return d3.sum(d, function(g) {return g.Amount; });
+                      })
+                      .entries(masterData.filter(function(d) {return d.Damage_Descp === type;}))
+        }
+        choroplethdata.filter(function(d,i) { 
+          return null})
+      //   console.log(choroplethdata)
+      }
+
+      function removebarchart(){
+          var svg_g = d3.select("#svg_bar_g")
+          svg_g.remove()
+      }
+
+      function formbarchart(chartData) {
+        // console.log(chartData)
+        var svg = d3.select("#svg-bar")
+                    .attr("width", svgbar_width)
+                    .attr("height", svgbar_height)
+                    .append("g")
+                    .attr("id", "svg_bar_g")
+                    .attr("width", gbar_width)
+                    .attr("height", gbar_height)
+                    .attr("transform", `translate(${bar_margin.left},${bar_margin.top})`);
+        var yscale = d3.scaleBand()
+                              .domain(chartData.map( function(d) 
+                                { return d.key;
+                                }))
+                              .range([0, gbar_height])
+                              .paddingInner(0.15);
+
+        var xscale = d3.scaleLinear()
+                              .domain([0, d3.max(chartData, function(d) { return (d.value/1000000); })])
+                              .range([0, gbar_width]);
+
+        svg.append("g")
+            .attr("transform", "translate(20,0)")
+            .call(d3.axisLeft(yscale));
+
+        svg.append("g")
+            .attr("transform", "translate("+ (20) +"," + (gbar_height) + ")")
+            .call(d3.axisBottom(xscale));
+
+        // create bars
+        svg.selectAll("rect")
+            .data(chartData)
+            .enter()
+            .append("rect")
+            .attr("transform", "translate(20,0)")
+            .attr("x", 0)
+            .attr("y", function(d, i)
+              {
+                return yscale(d.key)
+              })
+            .attr("height", function(d, i)
+              {
+                return yscale.bandwidth();
+              })
+            .attr("width", function(d, i)
+              {
+                return xscale(d.value/1000000)
+              })
+            .attr("class", "myrect")
+            .on("mouseover", function(d) {
+              generateChorData(Masterdata,d.key)
+              generatemap(choroplethdata);
+            })
+            .on("mouseout", function(d) {
+              generateChorData(Masterdata,null)
+              generatemap(choroplethdata);
+            })
+      }
+      
+      function generatemap(choroplethdata){
+        const mapWidth = 960
+        const mapHeight = 600
+
+        var svg = d3.select("#svg-chor")
+            .attr("width",mapWidth)
+            .attr("height",mapHeight);
 
 
-</head>
+        var losses_2015 = d3.map();
+        choroplethdata.map(function(d,i) { 
+          if(d.key > 10){
+          losses_2015.set(d.key, d.value); 
+          }else{
+            losses_2015.set(("0"+d.key).slice(-2), d.value); 
+          }})
+        var path = d3.geoPath();
 
-<body>
+        var x = d3.scaleLinear()
+            .domain([11,20])
+            .rangeRound([500, 860]);
 
+        var color = d3.scaleThreshold()
+            .domain(d3.range(12, 20))
+            .range(d3.schemeBlues[9]);
 
-<!-- Container for the visualization -->
+        var colorquant = d3.scaleQuantize()
+        .domain(1,10)
+        .range(d3.schemeBlues[9]);
 
-<div id="vis"></div>
+        var g = svg.append("g")
+                .attr("class", "key")
+                .attr("transform", "translate(0,40)");
 
-<script type="text/javascript">
-  
-var spec = "https://raw.githubusercontent.com/PavaniVelichati/usdalosses/master/barchart.json";
-  
-vegaEmbed('#vis', spec).then(function(result) {
-    
-// Access the Vega view instance (https://vega.github.io/vega/docs/api/view/) as result.view
-  }).catch(console.error);
+            g.selectAll("rect")
+            .data(color.range().map(function(d) {
+                d = color.invertExtent(d);
+                if (d[0] == null) d[0] = x.domain()[0];
+                if (d[1] == null) d[1] = x.domain()[1];
+                return d;
+                }))
+            .enter().append("rect")
+                .attr("height", 8)
+                .attr("x", function(d) { return x(d[0]); })
+                .attr("width", function(d) { return x(d[1]) - x(d[0]); })
+                .attr("fill", function(d) { return color(d[0]); });
 
-</script>
+            g.append("text")
+                .attr("class", "caption")
+                .attr("x", x.range()[0])
+                .attr("y", -6)
+                .attr("fill", "#000")
+                .attr("text-anchor", "start")
+                .attr("font-weight", "bold")
+                .text("Agri losses_2015 2015");
 
+            g.call(d3.axisBottom(x)
+                .tickSize(13)
+                .tickFormat(function(x, i) { return i ? x : x + "M"; })
+                .tickValues(color.domain()))
+            .select(".domain")
+                .remove();
 
-<div id="vis1"></div>
+            var mapper = [d3.json("https://d3js.org/us-10m.v1.json")] 
+            Promise.all(mapper).then(ready)
+            function ready([us]) {
+              // Country borders
+                svg.append("path")
+                  .attr('stroke',"#000")
+                  .attr("stroke-width", 1)
+                  .attr("class", "country-border")
+                  .attr("d", path(topojson.feature(us, us.objects.nation)));
 
-<script type="text/javascript">
-  
-var spec = "https://raw.githubusercontent.com/PavaniVelichati/usdalosses/master/choropleth.json";
-  
-vegaEmbed('#vis1', spec).then(function(result) {
-  }).catch(console.error);
+              // State borders
+                svg.append("path")
+                  .datum(topojson.mesh(us, us.objects.states, function(a, b) { return a !== b; }))
+                  .attr("class", "state-border")
+                  .attr("d", path);
 
-</script>
-
-
-
-</body>
-
+              // individual states
+              var state_g = svg.append("g")
+                  state_g.selectAll("path")
+                  .data(topojson.feature(us, us.objects.states).features)
+                  .enter().append("path")
+                  .attr("class","state")
+                  .on("mouseover", function(d) {
+                      console.log("State ID: "+d.id + " Amount: "+d.amount)
+                      removebarchart()
+                      generateBarData(Masterdata, d.id);
+                      formbarchart(bardata)
+                        })
+                  .on("mouseout", function(d) {
+                      removebarchart()
+                      generateBarData(Masterdata, null);
+                      formbarchart(bardata)
+                  })
+                  .attr("fill", function(d) { return color((d.amount = losses_2015.get(d.id))/10000000); })
+                  .attr("d", path)
+                  .append("title")
+                  .text(function(d) { return "State ID: "+ d.id + " Amount: " + d.amount ; });
+            }
+        }
+      
+      window.onload = loaddata;
+  </script>
+  </body>
 </html>
